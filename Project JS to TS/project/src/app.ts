@@ -1,23 +1,42 @@
+// 라이브러리 로딩 (npm 설치 라이브러리)
+// import 변수명 from '라이브러리 이름'
+// 변수, 함수 import 문법
+// import {} from '파일 상대 경로';
+import axios, { AxiosResponse } from 'axios';
+import {
+  Chart,
+  LinearScale,
+  LineController,
+  CategoryScale,
+  LineElement,
+  PointElement,
+  Filler,
+} from 'chart.js';
+
+// 타입 모듈
+import { PublicDataPortalResponse, PublicDataPortalInfo } from './covid/index';
+
 // utils
-function $(selector) {
-  return document.querySelector(selector);
+function $(selector: string) {
+  return document.querySelector(selector); // Element 타입 반환
 }
-function getUnixTimestamp(date) {
+function getUnixTimestamp(date: Date | string) {
   return new Date(date).getTime();
 }
 
 // DOM
-const confirmedTotal = $('.confirmed-total');
-const deathsTotal = $('.deaths');
-const recoveredTotal = $('.recovered');
-const lastUpdatedTime = $('.last-updated-time');
+// var a: Element | HTMLElement | HTMLParagraphElement
+const confirmedTotal = $('.confirmed-total') as HTMLSpanElement; // 타입 단언
+const deathsTotal = $('.deaths') as HTMLParagraphElement; // 타입 단언
+const recoveredTotal = $('.recovered') as HTMLParagraphElement; // 타입 단언
+const lastUpdatedTime = $('.last-updated-time') as HTMLParagraphElement; // 타입 단언
 const rankList = $('.rank-list');
 const deathsList = $('.deaths-list');
 const recoveredList = $('.recovered-list');
 const deathSpinner = createSpinnerElement('deaths-spinner');
 const recoveredSpinner = createSpinnerElement('recovered-spinner');
 
-function createSpinnerElement(id) {
+function createSpinnerElement(id: string): HTMLDivElement {
   const wrapperDiv = document.createElement('div');
   wrapperDiv.setAttribute('id', id);
   wrapperDiv.setAttribute(
@@ -34,50 +53,49 @@ function createSpinnerElement(id) {
 
 // state
 let isDeathLoading = false;
-let isRecoveredLoading = false;
-const baseURL =
-  `http://apis.data.go.kr/1352000/ODMS_COVID_04/callCovid04Api?serviceKey=${API_KEY}&apiType=json`;
+
+const api_key = 'abcd';
+const baseURL: string = `http://apis.data.go.kr/1352000/ODMS_COVID_04/callCovid04Api?serviceKey=${api_key}&apiType=json`;
 
 // xmlToJson
-function xmlToJson(xml) {
+function xmlToJson(xml: Node): any {
   // Create the return object
-  var obj = {};
+  let obj: any = {};
 
   if (xml.nodeType == 1) {
-    // element
-    // do attributes
-    if (xml.attributes.length > 0) {
+    // Element
+    const element = xml as Element;
+    if (element.attributes && element.attributes.length > 0) {
       obj['@attributes'] = {};
-      for (var j = 0; j < xml.attributes.length; j++) {
-        var attribute = xml.attributes.item(j);
+      for (let j = 0; j < element.attributes.length; j++) {
+        const attribute = element.attributes.item(j);
         obj['@attributes'][attribute.nodeName] = attribute.nodeValue;
       }
     }
   } else if (xml.nodeType == 3) {
-    // text
+    // Text Node
     obj = xml.nodeValue;
   }
 
-  // do children
-  // If all text nodes inside, get concatenated text from them.
-  var textNodes = [].slice.call(xml.childNodes).filter(function (node) {
-    return node.nodeType === 3;
-  });
-  if (xml.hasChildNodes() && xml.childNodes.length === textNodes.length) {
-    obj = [].slice.call(xml.childNodes).reduce(function (text, node) {
-      return text + node.nodeValue;
-    }, '');
+  // Handle children
+  const childNodes = Array.from(xml.childNodes);
+  const textNodes = childNodes.filter((node) => node.nodeType === 3);
+
+  if (xml.hasChildNodes() && childNodes.length === textNodes.length) {
+    obj = childNodes.reduce(
+      (text: string, node: Node) => text + (node.nodeValue || ''),
+      ''
+    );
   } else if (xml.hasChildNodes()) {
-    for (var i = 0; i < xml.childNodes.length; i++) {
-      var item = xml.childNodes.item(i);
-      var nodeName = item.nodeName;
-      if (typeof obj[nodeName] == 'undefined') {
+    for (let i = 0; i < childNodes.length; i++) {
+      const item = childNodes[i];
+      const nodeName = item.nodeName;
+      if (typeof obj[nodeName] === 'undefined') {
         obj[nodeName] = xmlToJson(item);
       } else {
-        if (typeof obj[nodeName].push == 'undefined') {
-          var old = obj[nodeName];
-          obj[nodeName] = [];
-          obj[nodeName].push(old);
+        if (!Array.isArray(obj[nodeName])) {
+          const old = obj[nodeName];
+          obj[nodeName] = [old];
         }
         obj[nodeName].push(xmlToJson(item));
       }
@@ -87,29 +105,35 @@ function xmlToJson(xml) {
 }
 
 // api
-function fetchCovidSummary() {
+function fetchCovidSummary(): Promise<AxiosResponse<string>> {
   const url = `${baseURL}&std_day=2021-12-15`;
   return axios.get(url);
 }
 
-function fetchCountryInfo(countryCode) {
+// enum CovidStatus {
+//   Confirmed = 'defCnt',
+//   Recovered = 'isolClearCnt',
+//   Deaths = 'deathCnt',
+// }
+
+function fetchCountryInfo(countryCode: string): Promise<AxiosResponse<string>> {
   // params: confirmed, recovered, deaths
   const url = `${baseURL}&numOfRows=7&gubun=${encodeURIComponent(countryCode)}`;
   return axios.get(url);
 }
 
 // methods
-function startApp() {
+function startApp(): void {
   setupData();
   initEvents();
 }
 
 // events
-function initEvents() {
+function initEvents(): void {
   rankList.addEventListener('click', handleListClick);
 }
 
-async function handleListClick(event) {
+async function handleListClick(event: MouseEvent) {
   let selectedId;
   if (
     event.target instanceof HTMLParagraphElement ||
@@ -130,9 +154,9 @@ async function handleListClick(event) {
   isDeathLoading = true;
 
   const xmlString = await fetchCountryInfo(selectedId);
-  let xmlNode = new DOMParser().parseFromString(xmlString.data, 'text/xml');
+  const xmlNode = new DOMParser().parseFromString(xmlString.data, 'text/xml');
   const jsonData = xmlToJson(xmlNode);
-  const data = jsonData.response.body.items.item;
+  const data: PublicDataPortalResponse = jsonData.response.body.items.item;
 
   // const { data: deathResponse } = await fetchCountryInfo(selectedId, 'deathCnt');
   // const { data: recoveredResponse } = await fetchCountryInfo(
@@ -152,9 +176,12 @@ async function handleListClick(event) {
   isDeathLoading = false;
 }
 
-function setDeathsList(data) {
-  const sorted = data.sort((a, b) => getUnixTimestamp(b.stdDay) - getUnixTimestamp(a.stdDay));
-  sorted.forEach((value) => {
+function setDeathsList(data: PublicDataPortalResponse): void {
+  const sorted = data.sort(
+    (a: PublicDataPortalInfo, b: PublicDataPortalInfo) =>
+      getUnixTimestamp(b.stdDay) - getUnixTimestamp(a.stdDay)
+  );
+  sorted.forEach((value: PublicDataPortalInfo) => {
     const li = document.createElement('li');
     li.setAttribute('class', 'list-item-b flex align-center');
     const span = document.createElement('span');
@@ -168,20 +195,27 @@ function setDeathsList(data) {
   });
 }
 
-function clearDeathList() {
+function clearDeathList(): void {
   deathsList.innerHTML = null;
 }
 
-function setTotalDeathsByCountry(data) {
-  deathsTotal.innerText = data.reduce((total, current) => total += parseInt(current.deathCnt), 0);
+function setTotalDeathsByCountry(data: PublicDataPortalResponse): void {
+  deathsTotal.innerText = data
+    .reduce(
+      (total: number, current: PublicDataPortalInfo) =>
+        (total += parseInt(current.deathCnt)),
+      0
+    )
+    .toString();
   // deathsTotal.innerText = data[0].Cases;
 }
 
-function setRecoveredList(data) {
+function setRecoveredList(data: PublicDataPortalResponse): void {
   const sorted = data.sort(
-    (a, b) => getUnixTimestamp(b.stdDay) - getUnixTimestamp(a.stdDay)
+    (a: PublicDataPortalInfo, b: PublicDataPortalInfo) =>
+      getUnixTimestamp(b.stdDay) - getUnixTimestamp(a.stdDay)
   );
-  sorted.forEach((value) => {
+  sorted.forEach((value: PublicDataPortalInfo) => {
     const li = document.createElement('li');
     li.setAttribute('class', 'list-item-b flex align-center');
     const span = document.createElement('span');
@@ -195,47 +229,68 @@ function setRecoveredList(data) {
   });
 }
 
-function clearRecoveredList() {
+function clearRecoveredList(): void {
   recoveredList.innerHTML = null;
 }
 
-function setTotalRecoveredByCountry(data) {
-  recoveredTotal.innerText = data.reduce((total, current) => total += parseInt(current.isolClearCnt), 0);
+function setTotalRecoveredByCountry(data: PublicDataPortalResponse): void {
+  recoveredTotal.innerText = data
+    .reduce(
+      (total: number, current: PublicDataPortalInfo) =>
+        (total += parseInt(current.isolClearCnt)),
+      0
+    )
+    .toString();
   // recoveredTotal.innerText = data[0].Cases;
 }
 
-function startLoadingAnimation() {
+function startLoadingAnimation(): void {
   deathsList.appendChild(deathSpinner);
   recoveredList.appendChild(recoveredSpinner);
 }
 
-function endLoadingAnimation() {
+function endLoadingAnimation(): void {
   deathsList.removeChild(deathSpinner);
   recoveredList.removeChild(recoveredSpinner);
 }
 
 async function setupData() {
-  const xmlString = await fetchCovidSummary();
-  let xmlNode = new DOMParser().parseFromString(xmlString.data, 'text/xml');
+  const { data } = await fetchCovidSummary();
+  const xmlNode = new DOMParser().parseFromString(data, 'text/xml');
   const jsonData = xmlToJson(xmlNode);
-  const origin_data = jsonData.response.body.items.item;
+  const originData: PublicDataPortalResponse =
+    jsonData.response.body.items.item;
 
   // 합계와 검역 데이터 제외
-  const data = origin_data.filter(
-    (item) => item.gubun !== '합계' && item.gubun !== '검역'
+  const finData: PublicDataPortalResponse = originData.filter(
+    (item: PublicDataPortalInfo) =>
+      item.gubun !== '합계' && item.gubun !== '검역'
   );
 
-  setTotalConfirmedNumber(data);
-  setTotalDeathsByWorld(data);
-  setTotalRecoveredByWorld(data);
-  setCountryRanksByConfirmedCases(data);
-  setLastUpdatedTimestamp(data);
+  setTotalConfirmedNumber(finData);
+  setTotalDeathsByWorld(finData);
+  setTotalRecoveredByWorld(finData);
+  setCountryRanksByConfirmedCases(finData);
+  setLastUpdatedTimestamp(finData);
 }
 
-function renderChart(data, labels) {
-  var ctx = $('#lineChart').getContext('2d');
+function renderChart(data: number[], labels: string[]): void {
+  // const lineChart = $('#lineChart') as HTMLCanvasElement;
+  // const ctx = lineChart.getContext('2d');
+  const ctx = ($('#lineChart') as HTMLCanvasElement).getContext('2d');
   Chart.defaults.color = '#f5eaea';
-  // Chart.defaults.font.family = 'Exo 2';
+  Chart.defaults.font.family = 'Exo 2';
+
+  // Chart.js 업데이트로 인해 register 메소드 추가
+  Chart.register(
+    LineElement,
+    LineController,
+    CategoryScale,
+    LinearScale,
+    PointElement,
+    Filler
+  );
+
   new Chart(ctx, {
     type: 'line',
     data: {
@@ -246,6 +301,7 @@ function renderChart(data, labels) {
           backgroundColor: '#feb72b',
           borderColor: '#feb72b',
           data,
+          fill: true,
         },
       ],
     },
@@ -253,30 +309,58 @@ function renderChart(data, labels) {
   });
 }
 
-function setChartData(data) {
-  const sorted = data.sort((a, b) => getUnixTimestamp(a.stdDay) - getUnixTimestamp(b.stdDay));
-  const chartData = sorted.slice(-7).map((value) => value.defCnt);
+function setChartData(data: PublicDataPortalResponse): void {
+  const sorted = data.sort(
+    (a: PublicDataPortalInfo, b: PublicDataPortalInfo) =>
+      getUnixTimestamp(a.stdDay) - getUnixTimestamp(b.stdDay)
+  );
+  const chartData = sorted
+    .slice(-7)
+    .map((value: PublicDataPortalInfo) => parseInt(value.defCnt));
   const chartLabel = sorted
     .slice(-7)
-    .map((value) => new Date(value.stdDay).toLocaleDateString().slice(0, -1));
+    .map((value: PublicDataPortalInfo) =>
+      new Date(value.stdDay).toLocaleDateString().slice(0, -1)
+    );
   renderChart(chartData, chartLabel);
 }
 
-function setTotalConfirmedNumber(data) {
-  confirmedTotal.innerText = data.reduce((total, current) => total += parseInt(current.defCnt), 0);
+function setTotalConfirmedNumber(data: PublicDataPortalResponse): void {
+  confirmedTotal.innerText = data
+    .reduce(
+      (total: number, current: PublicDataPortalInfo) =>
+        (total += parseInt(current.defCnt)),
+      0
+    )
+    .toString();
 }
 
-function setTotalDeathsByWorld(data) {
-  deathsTotal.innerText = data.reduce((total, current) => total += parseInt(current.deathCnt), 0);
+function setTotalDeathsByWorld(data: PublicDataPortalResponse): void {
+  deathsTotal.innerText = data
+    .reduce(
+      (total: number, current: PublicDataPortalInfo) =>
+        (total += parseInt(current.deathCnt)),
+      0
+    )
+    .toString();
 }
 
-function setTotalRecoveredByWorld(data) {
-  recoveredTotal.innerText = data.reduce((total, current) => total += parseInt(current.isolClearCnt), 0);
+function setTotalRecoveredByWorld(data: PublicDataPortalResponse): void {
+  recoveredTotal.innerText = data
+    .reduce(
+      (total: number, current: PublicDataPortalInfo) =>
+        (total += parseInt(current.isolClearCnt)),
+      0
+    )
+    .toString();
 }
 
-function setCountryRanksByConfirmedCases(data) {
-  const sorted = data.sort((a, b) => b.defCnt - a.defCnt);
-  sorted.forEach((value) => {
+function setCountryRanksByConfirmedCases(data: PublicDataPortalResponse): void {
+  const sorted = data.sort(
+    (a: PublicDataPortalInfo, b: PublicDataPortalInfo) =>
+      parseInt(b.defCnt) - parseInt(a.defCnt)
+  );
+  sorted.forEach((value: PublicDataPortalInfo) => {
     const li = document.createElement('li');
     li.setAttribute('class', 'list-item flex align-center');
     li.setAttribute('id', value.gubun);
@@ -292,7 +376,7 @@ function setCountryRanksByConfirmedCases(data) {
   });
 }
 
-function setLastUpdatedTimestamp(data) {
+function setLastUpdatedTimestamp(data: PublicDataPortalResponse): void {
   lastUpdatedTime.innerText = new Date(data[0].stdDay).toLocaleString();
 }
 
