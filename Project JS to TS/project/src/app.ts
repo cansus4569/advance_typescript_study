@@ -17,8 +17,10 @@ import {
 import { PublicDataPortalResponse, PublicDataPortalInfo } from './covid/index';
 
 // utils
-function $(selector: string) {
-  return document.querySelector(selector); // Element 타입 반환
+// $ : DOM 선택자 함수
+function $<T extends HTMLElement = HTMLDivElement>(selector: string) {
+  const element = document.querySelector(selector); // Element 타입 반환
+  return element as T;
 }
 function getUnixTimestamp(date: Date | string) {
   return new Date(date).getTime();
@@ -26,13 +28,14 @@ function getUnixTimestamp(date: Date | string) {
 
 // DOM
 // var a: Element | HTMLElement | HTMLParagraphElement
-const confirmedTotal = $('.confirmed-total') as HTMLSpanElement; // 타입 단언
+// const temp = $<string>('.abc');
+const confirmedTotal = $<HTMLSpanElement>('.confirmed-total'); // 타입 단언
 const deathsTotal = $('.deaths') as HTMLParagraphElement; // 타입 단언
 const recoveredTotal = $('.recovered') as HTMLParagraphElement; // 타입 단언
 const lastUpdatedTime = $('.last-updated-time') as HTMLParagraphElement; // 타입 단언
-const rankList = $('.rank-list');
-const deathsList = $('.deaths-list');
-const recoveredList = $('.recovered-list');
+const rankList = $('.rank-list') as HTMLOListElement;
+const deathsList = $('.deaths-list') as HTMLOListElement;
+const recoveredList = $('.recovered-list') as HTMLOListElement;
 const deathSpinner = createSpinnerElement('deaths-spinner');
 const recoveredSpinner = createSpinnerElement('recovered-spinner');
 
@@ -116,9 +119,11 @@ function fetchCovidSummary(): Promise<AxiosResponse<string>> {
 //   Deaths = 'deathCnt',
 // }
 
-function fetchCountryInfo(countryCode: string): Promise<AxiosResponse<string>> {
+function fetchCountryInfo(
+  countryCode: string | undefined
+): Promise<AxiosResponse<string>> {
   // params: confirmed, recovered, deaths
-  const url = `${baseURL}&numOfRows=7&gubun=${encodeURIComponent(countryCode)}`;
+  const url = `${baseURL}&numOfRows=7&gubun=${countryCode}`;
   return axios.get(url);
 }
 
@@ -130,16 +135,32 @@ function startApp(): void {
 
 // events
 function initEvents(): void {
+  // strictNullChecks : true 시 발생하는 에러
+  if (!rankList) {
+    return;
+  }
+  // strictFunctionTypes : true 시 발생하는 에러
   rankList.addEventListener('click', handleListClick);
 }
 
-async function handleListClick(event: MouseEvent) {
+// const a: Element;
+// const b: HTMLElement;
+// const c: HTMLDivElement;
+
+// const evt1: Event;
+// const evt2: UIEvent;
+// const ev3: MouseEvent;
+
+async function handleListClick(event: Event) {
   let selectedId;
   if (
     event.target instanceof HTMLParagraphElement ||
     event.target instanceof HTMLSpanElement
   ) {
-    selectedId = event.target.parentElement.id;
+    // 삼항 연산자를 이용한 null check
+    selectedId = event.target.parentElement
+      ? event.target.parentElement.id
+      : undefined;
   }
   if (event.target instanceof HTMLLIElement) {
     selectedId = event.target.id;
@@ -191,12 +212,20 @@ function setDeathsList(data: PublicDataPortalResponse): void {
     p.textContent = new Date(value.stdDay).toLocaleDateString().slice(0, -1);
     li.appendChild(span);
     li.appendChild(p);
-    deathsList.appendChild(li);
+    // if (!deathsList) {
+    //   return;
+    // }
+    // !. : 이 변수는 null 이 아니다.   (non-null assertion operator)
+    deathsList!.appendChild(li);
   });
 }
 
 function clearDeathList(): void {
-  deathsList.innerHTML = null;
+  if (!deathsList) {
+    return;
+  }
+  deathsList.innerHTML = '';
+  // deathsList.innerHTML = null;
 }
 
 function setTotalDeathsByCountry(data: PublicDataPortalResponse): void {
@@ -225,12 +254,21 @@ function setRecoveredList(data: PublicDataPortalResponse): void {
     p.textContent = new Date(value.stdDay).toLocaleDateString().slice(0, -1);
     li.appendChild(span);
     li.appendChild(p);
-    recoveredList.appendChild(li);
+    // 옵셔널 체이닝 연산자
+    recoveredList?.appendChild(li);
+    /* 
+    // 옵셔널 체이닝 연산자 내부 로직 원리
+    if (recoveredList === null || recoveredList === undefined) {
+      return;
+    } else {
+      recoveredList.appendChild(li);
+    }
+    */
   });
 }
 
 function clearRecoveredList(): void {
-  recoveredList.innerHTML = null;
+  recoveredList.innerHTML = '';
 }
 
 function setTotalRecoveredByCountry(data: PublicDataPortalResponse): void {
@@ -291,7 +329,7 @@ function renderChart(data: number[], labels: string[]): void {
     Filler
   );
 
-  new Chart(ctx, {
+  new Chart(ctx!, {
     type: 'line',
     data: {
       labels,
